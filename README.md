@@ -124,6 +124,13 @@ curl -X POST http://localhost:8000/api/submit \
   -d '{"task": "Find top 3 Python web frameworks on GitHub AND check the current weather in San Francisco"}'
 ```
 
+### Example 4: News Search 📰
+```bash
+curl -X POST http://localhost:8000/api/submit \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Find the top 3 headlines about AI technology in the US"}'
+```
+
 ---
 
 ## 🏗️ Project Architecture
