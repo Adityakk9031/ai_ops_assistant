@@ -59,7 +59,8 @@ class Planner:
         self.logger.info(f"Creating plan for task: {user_task}")
         
         # Format the user prompt
-        user_prompt = self.prompt_template["user_template"].format(user_task=user_task)
+        # Use replace() instead of format() because the template contains JSON curly braces
+        user_prompt = self.prompt_template["user_template"].replace("{user_task}", user_task)
         
         # Define validator
         def validate_plan(plan_json: Dict[str, Any]) -> bool:

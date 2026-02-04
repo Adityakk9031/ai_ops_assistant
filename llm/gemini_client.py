@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class GeminiClient:
     """Client for interacting with Gemini API."""
     
-    def __init__(self, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, model_name: str = "gemini-2.5-flash"):
         self.api_key = os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
