@@ -1,6 +1,7 @@
 """Planner agent - creates execution plans from user tasks."""
 
 import os
+import json
 import logging
 from typing import Dict, Any
 from pydantic import BaseModel, Field, ValidationError
@@ -43,12 +44,13 @@ class Planner:
         self.client = GeminiClient()
         self.logger = logging.getLogger("agent.planner")
     
-    def create_plan(self, user_task: str) -> Dict[str, Any]:
+    def create_plan(self, user_task: str, past_memory: list = None) -> Dict[str, Any]:
         """
         Create an execution plan for the given task.
         
         Args:
             user_task: The task description from the user
+            past_memory: Optional list of past similar task memories retrieved from Pinecone
             
         Returns:
             Dictionary containing the execution plan
@@ -61,6 +63,15 @@ class Planner:
         # Format the user prompt
         # Use replace() instead of format() because the template contains JSON curly braces
         user_prompt = self.prompt_template["user_template"].replace("{user_task}", user_task)
+        
+        # Inject past memory context if available
+        if past_memory:
+            memory_text = "\n\nPAST RELEVANT MEMORY (Retrieved from Pinecone vector store):\n"
+            for i, mem in enumerate(past_memory, 1):
+                memory_text += f"Past Memory #{i}:\n Task: {mem.get('task')}\n Summary: {mem.get('task_summary')}\n Plan Structure: {json.dumps(mem.get('plan', {}))}\n"
+            memory_text += "\nINSTRUCTION: Use the past memory above to guide step creation, follow proven formats, and avoid repeating past errors."
+            user_prompt += memory_text
+            self.logger.info(f"Injected {len(past_memory)} past memories into Planner prompt")
         
         # Define validator
         def validate_plan(plan_json: Dict[str, Any]) -> bool:

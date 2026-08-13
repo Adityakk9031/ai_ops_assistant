@@ -2,6 +2,7 @@
 
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
 from tools.base_tool import ToolInterface, ToolResponse
 
 
@@ -10,6 +11,7 @@ class WeatherTool(ToolInterface):
     
     def __init__(self):
         super().__init__("WeatherTool")
+        load_dotenv()
         self.api_key = os.getenv("OPENWEATHER_KEY")
         if not self.api_key:
             self.logger.warning("OPENWEATHER_KEY not set")

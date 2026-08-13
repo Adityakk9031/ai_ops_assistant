@@ -8,10 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-from agents import Planner, Executor, Verifier
-
-# Load environment variables
+# Load environment variables first before importing agents/services
 load_dotenv()
+
+from agents import Planner, Executor, Verifier
+from services.workflow_service import WorkflowService
 
 # Configure logging
 logging.basicConfig(
@@ -23,8 +24,8 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="AI Operations Assistant",
-    description="Multi-agent system for automated task execution",
-    version="1.0.0"
+    description="Multi-agent system for automated task execution powered by LangGraph and Pinecone",
+    version="2.0.0"
 )
 
 # Add CORS middleware
@@ -36,10 +37,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize agents
+# Initialize agents & services
 planner = Planner()
 executor = Executor()
 verifier = Verifier()
+workflow_service = WorkflowService()
+
 
 
 # Request/Response models
@@ -152,9 +155,9 @@ async def verify_results(request: VerifyRequest):
 @app.post("/api/submit", response_model=SubmitResponse)
 async def submit_task(request: TaskRequest):
     """
-    Submit a task for complete execution (plan -> execute -> verify).
+    Submit a task for complete execution (Memory -> Plan -> Execute -> Verify -> SaveMemory).
     
-    This is the main endpoint that orchestrates the entire workflow.
+    Orchestrated via LangGraph StateGraph workflow backed by Pinecone vector DB memory.
     
     Args:
         request: TaskRequest with task description
@@ -163,50 +166,19 @@ async def submit_task(request: TaskRequest):
         SubmitResponse with plan, execution results, and verification
     """
     try:
-        logger.info(f"Processing task: {request.task}")
+        logger.info(f"Processing task via LangGraph StateGraph: '{request.task}'")
+        result = await workflow_service.run_task(request.task)
         
-        # Step 1: Create plan
-        logger.info("Step 1: Creating plan")
-        plan = planner.create_plan(request.task)
-        
-        # Step 2: Execute plan
-        logger.info("Step 2: Executing plan")
-        executor_results = executor.execute_plan(plan)
-        
-        # Step 3: Verify results
-        logger.info("Step 3: Verifying results")
-        verification = verifier.verify_results(plan, executor_results)
-        
-        # Check if there are issues that need fixing
-        issues = verification.get("issues", [])
-        if issues:
-            logger.warning(f"Found {len(issues)} issues during verification")
-            # Optionally re-run failed steps (simple implementation)
-            for issue in issues:
-                step_id = issue.get("step_id")
-                if step_id:
-                    logger.info(f"Re-running step {step_id}")
-                    retry_result = executor.execute_step_by_id(plan, step_id)
-                    # Update the result
-                    for i, result in enumerate(executor_results):
-                        if result.get("id") == step_id:
-                            executor_results[i] = retry_result
-                            break
-            
-            # Re-verify after fixes
-            logger.info("Re-verifying after fixes")
-            verification = verifier.verify_results(plan, executor_results)
-        
-        logger.info("Task completed successfully")
         return SubmitResponse(
-            plan=plan,
-            executor_results=executor_results,
-            verification=verification
+            plan=result["plan"],
+            executor_results=result["executor_results"],
+            verification=result["verification"]
         )
         
     except Exception as e:
         logger.error(f"Task submission failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Task submission failed: {str(e)}")
+
 
 
 @app.get("/health")

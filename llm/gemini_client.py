@@ -5,6 +5,7 @@ import json
 import logging
 from typing import Dict, Any, Optional
 import google.generativeai as genai
+from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
@@ -13,13 +14,14 @@ logger = logging.getLogger(__name__)
 class GeminiClient:
     """Client for interacting with Gemini API."""
     
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, model_name: str = None):
+        load_dotenv()
         self.api_key = os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
         
         genai.configure(api_key=self.api_key)
-        self.model_name = model_name
+        self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
         self.logger = logging.getLogger("gemini_client")
     
     @retry(

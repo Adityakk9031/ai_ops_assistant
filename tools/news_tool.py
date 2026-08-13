@@ -2,6 +2,7 @@
 
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
 from tools.base_tool import ToolInterface, ToolResponse
 
 
@@ -10,6 +11,7 @@ class NewsTool(ToolInterface):
     
     def __init__(self):
         super().__init__("NewsTool")
+        load_dotenv()
         self.api_key = os.getenv("NEWSAPI_KEY")
         if not self.api_key:
             self.logger.warning("NEWSAPI_KEY not set")

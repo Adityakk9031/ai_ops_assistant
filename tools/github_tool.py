@@ -3,6 +3,7 @@
 import os
 from typing import Dict, Any, List, Optional
 import httpx
+from dotenv import load_dotenv
 from tools.base_tool import ToolInterface, ToolResponse
 
 
@@ -11,6 +12,7 @@ class GitHubTool(ToolInterface):
     
     def __init__(self):
         super().__init__("GitHubTool")
+        load_dotenv()
         self.token = os.getenv("GITHUB_TOKEN")
         if not self.token:
             self.logger.warning("GITHUB_TOKEN not set - API rate limits will be restricted")
