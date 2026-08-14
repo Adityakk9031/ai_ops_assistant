@@ -20,12 +20,13 @@ class Executor:
         }
         self.logger = logging.getLogger("agent.executor")
     
-    def execute_plan(self, plan: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def execute_plan(self, plan: Dict[str, Any], mcp_tools: list = None) -> List[Dict[str, Any]]:
         """
-        Execute a plan by running each step.
+        Execute a plan by running each step using MCP tools if available.
         
         Args:
             plan: The execution plan from Planner
+            mcp_tools: Optional list of dynamic MCP tools loaded via load_mcp_tools
             
         Returns:
             List of step results
@@ -36,7 +37,7 @@ class Executor:
         results = []
         
         for step in steps:
-            result = self._execute_step(step)
+            result = self._execute_step(step, mcp_tools=mcp_tools)
             results.append(result)
             
             # Log step completion
@@ -47,12 +48,13 @@ class Executor:
         
         return results
     
-    def _execute_step(self, step: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_step(self, step: Dict[str, Any], mcp_tools: list = None) -> Dict[str, Any]:
         """
         Execute a single step.
         
         Args:
             step: Step definition from plan
+            mcp_tools: Optional list of MCP tool instances
             
         Returns:
             Step result dictionary
@@ -63,8 +65,49 @@ class Executor:
         max_retries = step.get("retry", 0)
         
         self.logger.info(f"Executing step {step_id}: {step.get('title')}")
+
+        # Check for matching MCP tool
+        mcp_tool = None
+        if mcp_tools:
+            for t in mcp_tools:
+                t_name = getattr(t, 'name', '')
+                if t_name == tool_name or t_name.lower() in tool_name.lower() or tool_name.lower() in t_name.lower():
+                    mcp_tool = t
+                    break
         
-        # Get the tool
+        # If MCP tool is found, execute via MCP adapter invoke
+        if mcp_tool:
+            self.logger.info(f"Executing step {step_id} via MCP Tool: '{mcp_tool.name}'")
+            attempts = 0
+            last_error = None
+            for attempt in range(max_retries + 1):
+                attempts += 1
+                try:
+                    res = mcp_tool.invoke(inputs)
+                    tool_data = res if isinstance(res, dict) else {"result": str(res)}
+                    return {
+                        "id": step_id,
+                        "tool_call": {"name": mcp_tool.name, "args": inputs},
+                        "tool_result": {"ok": True, "status_code": 200, "data": tool_data, "error": None},
+                        "success": True,
+                        "attempts": attempts,
+                        "error": None
+                    }
+                except Exception as e:
+                    last_error = str(e)
+                    if attempt < max_retries:
+                        import time
+                        time.sleep(2 ** attempt)
+            return {
+                "id": step_id,
+                "tool_call": {"name": tool_name, "args": inputs},
+                "tool_result": {},
+                "success": False,
+                "attempts": attempts,
+                "error": last_error or "MCP Tool execution failed"
+            }
+        
+        # Fallback to direct tool instances
         tool = self.tools.get(tool_name)
         if not tool:
             return {

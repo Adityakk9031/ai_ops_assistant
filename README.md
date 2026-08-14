@@ -1,10 +1,11 @@
 # 🤖 AI Operations Assistant
 
-> A **production-ready, multi-agent AI system** that autonomously plans, executes, verifies, and **remembers** complex tasks — powered by **Gemini 3.5 Flash**, **LangGraph**, **Pinecone Vector DB**, and real-world APIs.
+> A **production-ready, multi-agent AI system** that autonomously plans, executes, verifies, and **remembers** complex tasks — powered by **Gemini 3.5 Flash**, **LangGraph**, **Model Context Protocol (MCP)**, **Pinecone Vector DB**, and real-world APIs.
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab?logo=python&logoColor=white)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![LangGraph](https://img.shields.io/badge/LangGraph-StateGraph-ff6b35?logo=langchain&logoColor=white)](https://langchain-ai.github.io/langgraph/)
+[![MCP](https://img.shields.io/badge/MCP-FastMCP-7000FF?logo=protocol&logoColor=white)](https://modelcontextprotocol.io)
 [![Pinecone](https://img.shields.io/badge/Pinecone-Vector%20DB-12B76A?logo=pinecone&logoColor=white)](https://pinecone.io)
 [![Gemini](https://img.shields.io/badge/Gemini-3.5%20Flash-4285F4?logo=google&logoColor=white)](https://aistudio.google.com)
 [![License](https://img.shields.io/badge/License-MIT-a855f7)](LICENSE)
@@ -22,8 +23,8 @@
 
 ---
 
-### LangGraph Workflow in Server Logs
-> *Add screenshot of terminal showing the full LangGraph node flow*
+### LangGraph & MCP Server Logs
+> *Add screenshot of terminal showing the full LangGraph node flow and MCP tool session*
 > 📷 `screenshots/server_logs.png`
 
 <!-- SCREENSHOT PLACEHOLDER -->
@@ -57,10 +58,11 @@ Given a **plain English task** like:
 The AI Operations Assistant:
 
 1. **🧠 Recalls past memory** — Queries Pinecone for similar tasks already solved before
-2. **📋 Plans intelligently** — Gemini 3.5 Flash breaks the task into structured, typed steps
-3. **⚡ Executes autonomously** — Calls real APIs (GitHub, OpenWeatherMap, NewsAPI) with retry logic
-4. **✅ Self-verifies** — Validates outputs against expected schemas, catches errors
-5. **💾 Saves to memory** — Stores successful plans as 768-dim vectors in Pinecone for future recall
+2. **🔌 Connects to MCP Server** — Establishes stdio session with `mcp_server.py` via `langchain-mcp-adapters`
+3. **📋 Plans intelligently** — Gemini 3.5 Flash breaks the task into structured, typed steps using 7 registered MCP tools
+4. **⚡ Executes autonomously** — Runs MCP tool calls (GitHub, OpenWeatherMap, NewsAPI) over stdio transport with retry logic
+5. **✅ Self-verifies** — Validates outputs against expected schemas, catches errors
+6. **💾 Saves to memory** — Stores successful plans as 768-dim vectors in Pinecone for future recall
 
 ---
 
@@ -79,21 +81,62 @@ The AI Operations Assistant:
 │  ┌──────────┐    ┌──────────┐    ┌──────────┐              │
 │  │  Memory  │───▶│ Planner  │───▶│ Executor │              │
 │  │  Node    │    │  Node    │    │  Node    │              │
-│  └──────────┘    └──────────┘    └──────────┘              │
-│       ▲                               │                     │
-│       │                               ▼                     │
-│  ┌──────────┐ ◀──── pass ──── ┌──────────────┐             │
-│  │  Save    │                 │   Verifier   │             │
-│  │  Memory  │                 │   Node       │             │
-│  └──────────┘                 └──────────────┘             │
-│                                       │ fail (retry)        │
-│                                       ▼                     │
-│                               ┌──────────────┐             │
-│                               │   Executor   │ (re-run)    │
-│                               └──────────────┘             │
+│  └──────────┘    └────┬─────┘    └────┬─────┘              │
+│       ▲               │               │                     │
+│       │               └───────┬───────┘                     │
+│       │           load_mcp_tools()                          │
+│  ┌──────────┐                 ▼                             │
+│  │  Save    │    ┌─────────────────────────┐                │
+│  │  Memory  │◀───│   MCP ClientSession     │                │
+│  └──────────┘    └────────────┬────────────┘                │
+│                               │ stdio transport             │
+│                               ▼                             │
+│                  ┌─────────────────────────┐                │
+│                  │  FastMCP Server         │                │
+│                  │  (mcp_server.py)        │                │
+│                  │  7 Registered Tools     │                │
+│                  └─────────────────────────┘                │
+│                               │                             │
+│                               ▼                             │
+│                      ┌─────────────────┐                    │
+│                      │  Verifier Node  │                    │
+│                      └─────────────────┘                    │
 └─────────────────────────────────────────────────────────────┘
 
 Pinecone Vector DB ──── embeddings ──── Google gemini-embedding-001
+```
+
+---
+
+## 🔌 Model Context Protocol (MCP) Integration
+
+This project uses the **Model Context Protocol (MCP)** to expose modular API tools over standard input/output (`stdio`) transport via `mcp_server.py`.
+
+### Registered MCP Tools (7 Tools Total)
+
+| Category | Tool Name | Description |
+|:---|:---|:---|
+| 🐙 **GitHub** | `github_search_repos` | Search GitHub repositories matching a query string |
+| 🐙 **GitHub** | `github_get_repo` | Get detailed information for a specific GitHub repository |
+| 🐙 **GitHub** | `github_get_repos_batch` | Get details for multiple GitHub repositories at once |
+| 🌤️ **Weather** | `weather_current` | Get current weather conditions for a specified city |
+| 🌤️ **Weather** | `weather_forecast` | Get multi-day weather forecast for a specified city |
+| 📰 **News** | `news_search` | Search news articles matching keyword queries |
+| 📰 **News** | `news_top_headlines` | Get top headlines by category or country |
+
+Tools are initialized via `FastMCP` and dynamically loaded into the LangGraph workflow using **`langchain-mcp-adapters`**:
+
+```python
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from langchain_mcp_adapters.tools import load_mcp_tools
+
+server_params = StdioServerParameters(command="python", args=["mcp_server.py"])
+
+async with stdio_client(server_params) as (read, write):
+    async with ClientSession(read, write) as session:
+        await session.initialize()
+        mcp_tools = await load_mcp_tools(session)
 ```
 
 ---
@@ -104,14 +147,15 @@ Pinecone Vector DB ──── embeddings ──── Google gemini-embedding-
 ai_ops_assistant/
 │
 ├── main.py                    # FastAPI server entry point
+├── mcp_server.py              # FastMCP Server exposing 7 MCP tools over stdio
 ├── requirements.txt           # All Python dependencies
 ├── .env                       # Your secret API keys (never commit!)
 ├── .env.example               # Template for .env
 ├── manifest.json              # Tool registry & system config
 │
 ├── agents/                    # The "Brains"
-│   ├── planner.py             # Decomposes tasks into typed step plans
-│   ├── executor.py            # Executes steps, calls tools, handles retries
+│   ├── planner.py             # Decomposes tasks into typed step plans via MCP tools
+│   ├── executor.py            # Executes steps via MCP tool adapters with retries
 │   └── verifier.py            # Validates outputs against expected schemas
 │
 ├── workflow/
@@ -130,9 +174,10 @@ ai_ops_assistant/
 │
 ├── tools/                     # The "Hands"
 │   ├── base_tool.py           # Abstract ToolInterface + ToolResponse
-│   ├── github_tool.py         # GitHub REST API (search, repo details)
-│   ├── weather_tool.py        # OpenWeatherMap API (current weather)
-│   └── news_tool.py           # NewsAPI (latest headlines)
+│   ├── github_tool.py         # GitHub REST API implementation
+│   ├── weather_tool.py        # OpenWeatherMap API implementation
+│   ├── news_tool.py           # NewsAPI implementation
+│   └── langchain_tools.py     # Dynamic MCP tool loader utilities
 │
 ├── services/
 │   └── workflow_service.py    # Bridges FastAPI request to LangGraph
@@ -148,6 +193,8 @@ ai_ops_assistant/
 | Layer | Technology |
 |:---|:---|
 | **LLM** | Google Gemini 3.5 Flash (`models/gemini-3.5-flash`) |
+| **Tool Protocol** | Model Context Protocol (MCP via `FastMCP`) |
+| **MCP Adapters** | `langchain-mcp-adapters` over stdio transport |
 | **Embeddings** | Google `models/gemini-embedding-001` (768-dim) |
 | **Orchestration** | LangGraph StateGraph (conditional edges, cyclic retry) |
 | **Vector Memory** | Pinecone Serverless Index |
@@ -181,7 +228,7 @@ venv\Scripts\activate
 # Mac/Linux:
 source venv/bin/activate
 
-# Install all dependencies
+# Install all dependencies (including mcp & langchain-mcp-adapters)
 pip install -r requirements.txt
 ```
 
@@ -213,8 +260,6 @@ PINECONE_INDEX_NAME=ai-ops-memory
 | `NEWSAPI_KEY` | **Free** | [NewsAPI](https://newsapi.org/register) | Register → Copy key from dashboard |
 | `PINECONE_API_KEY` | **Free** | [Pinecone Console](https://app.pinecone.io) | Create account → Create index (dimension: **768**) → Copy API key |
 
-> ⚠️ **Pinecone Index Setup**: Create your index with **dimension = 768**, metric = **cosine**, and name it `ai-ops-memory` (or update `PINECONE_INDEX_NAME` to match).
-
 ---
 
 ## ▶️ Running the Application
@@ -225,9 +270,9 @@ python main.py
 ```
 
 Expected startup output:
-```
+```text
 INFO:memory.vector_store:Successfully connected to Pinecone index 'ai-ops-memory'
-INFO:workflow.graph:Successfully compiled LangGraph StateGraph workflow
+INFO:workflow.graph:Successfully compiled LangGraph StateGraph workflow with MCP tool support
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 ```
 
@@ -237,7 +282,7 @@ INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 
 ## 🧪 Usage & Examples
 
-### Example 1: Weather Check
+### Example 1: Weather Check (via MCP)
 ```bash
 curl -X POST http://localhost:8000/api/submit \
   -H "Content-Type: application/json" \
@@ -245,17 +290,18 @@ curl -X POST http://localhost:8000/api/submit \
 ```
 
 **Expected server log flow:**
-```
+```text
 [LangGraph: Memory Node]    Querying Pinecone for past memory...
-[LangGraph: Planner Node]   Creating plan with 1 steps
-[LangGraph: Executor Node]  Executing step: Get London Weather → WeatherTool ✅
+[LangGraph: Planner Node]   Creating plan for task...
+[MCP Session]               Successfully loaded 7 tools via load_mcp_tools()
+[LangGraph: Executor Node]  Executing step via MCP Tool: 'weather_current' ✅
 [LangGraph: Verifier Node]  Confidence: 1.0, Issues: 0 → Routing to SaveMemory
 [LangGraph: SaveMemory Node] Upserted to Pinecone ✅ {'upserted_count': 1}
 ```
 
 ---
 
-### Example 2: GitHub Search
+### Example 2: GitHub Search (via MCP)
 ```bash
 curl -X POST http://localhost:8000/api/submit \
   -H "Content-Type: application/json" \
@@ -264,7 +310,7 @@ curl -X POST http://localhost:8000/api/submit \
 
 ---
 
-### Example 3: News Headlines
+### Example 3: News Headlines (via MCP)
 ```bash
 curl -X POST http://localhost:8000/api/submit \
   -H "Content-Type: application/json" \
@@ -273,24 +319,15 @@ curl -X POST http://localhost:8000/api/submit \
 
 ---
 
-### Example 4: Multi-Step Task 🌟
+### Example 4: Memory Recall Test
+Run a task **twice**. On the second run, watch the logs — the system will retrieve the previously saved plan from Pinecone vector memory:
 ```bash
-curl -X POST http://localhost:8000/api/submit \
-  -H "Content-Type: application/json" \
-  -d '{"task": "Find top Python ML repos on GitHub AND get the weather in San Francisco"}'
-```
-
----
-
-### Example 5: Memory Recall Test
-Run a task **twice**. On the second run, watch the logs — the system will retrieve the previously saved plan from Pinecone:
-```bash
-# First run — saves to Pinecone
+# First run — saves vector to Pinecone
 curl -X POST http://localhost:8000/api/submit \
   -H "Content-Type: application/json" \
   -d '{"task": "Get current weather in Tokyo"}'
 
-# Second run — recalls from Pinecone memory
+# Second run — recalls vector memory from Pinecone
 curl -X POST http://localhost:8000/api/submit \
   -H "Content-Type: application/json" \
   -d '{"task": "What is the weather like in Tokyo?"}'
@@ -298,56 +335,28 @@ curl -X POST http://localhost:8000/api/submit \
 
 ---
 
-## 🔄 LangGraph Workflow Detail
-
-The system is built on a **LangGraph StateGraph** with the following nodes and edges:
+## 🔄 LangGraph & MCP Workflow Detail
 
 | Node | Role | Description |
 |:---|:---|:---|
-| `memory_node` | **Recall** | Embeds the task and queries Pinecone for similar past successes |
-| `planner_node` | **Plan** | Gemini 3.5 Flash decomposes the task into validated JSON step plans |
-| `executor_node` | **Act** | Executes each tool call with retry logic and error handling |
-| `verifier_node` | **Verify** | Validates results against expected output schema; routes on failure |
-| `save_memory_node` | **Remember** | Saves successful plan + verification as a 768-dim Pinecone vector |
-
-**Conditional Edge Logic:**
-- If `verifier_node` passes → route to `save_memory_node` → **END**
-- If `verifier_node` fails and `retry_count < max_retries` → route back to `executor_node`
-- If `retry_count >= max_retries` → route to `save_memory_node` → **END** (with error state)
+| `memory_node` | **Recall** | Embeds task and queries Pinecone for similar past task memories |
+| `planner_node` | **Plan** | Loads 7 tools via `load_mcp_tools()` and creates structured step plans with Gemini 3.5 |
+| `executor_node` | **Act** | Calls FastMCP server tools over stdio transport with exponential retries |
+| `verifier_node` | **Verify** | Validates results against expected schema; routes on failure |
+| `save_memory_node` | **Remember** | Saves successful plan + verification as a 768-dim vector to Pinecone |
 
 ---
 
 ## ❓ Troubleshooting
 
-**Q: `404 NOT_FOUND` for embedding model**
-> A: Only `models/gemini-embedding-001` is supported. The code already uses this. If you forked an older version, update `memory/vector_store.py`.
+**Q: `Cannot find module langchain_mcp_adapters`**
+> A: Run `pip install -r requirements.txt` to install `langchain-mcp-adapters` and `mcp`.
 
-**Q: Pinecone upsert fails with dimension mismatch**
-> A: Your Pinecone index must be created with **dimension = 768**. The code sets `output_dimensionality=768` automatically.
+**Q: `429 Quota Exceeded` from Gemini API**
+> A: You hit Google's free tier rate limit (20 requests per minute). Simply wait 10-15 seconds before running the next request.
 
-**Q: `KeyError: 'task_summary'` in planner**
-> A: This was a legacy bug. It is fixed. Restart your server after pulling latest changes.
-
-**Q: GitHub API rate limit (403)**
-> A: You have not set `GITHUB_TOKEN` in `.env`. Without a token, GitHub limits you to 60 requests/hour. With a token: 5,000/hour.
-
-**Q: `bash: -H: command not found`**
-> A: On Windows Git Bash, use `\` for multi-line curl commands, or run the entire command on a single line.
-
-**Q: `ImportError: No module named 'pinecone'`**
-> A: Run `pip install -r requirements.txt` with your virtual environment activated.
-
----
-
-## 🗺️ Roadmap / Future Improvements
-
-- [ ] Add a React / Next.js frontend dashboard
-- [ ] Stream LLM responses via Server-Sent Events (SSE)
-- [ ] Add more tools: SQL query tool, code execution tool, Slack notification tool
-- [ ] Add per-user memory namespacing in Pinecone
-- [ ] Implement async parallel tool execution for multi-step tasks
-- [ ] Add OpenTelemetry tracing for full observability
-- [ ] Docker + docker-compose deployment configuration
+**Q: Pinecone dimension mismatch**
+> A: Your Pinecone index must be created with **dimension = 768** to match `models/gemini-embedding-001`.
 
 ---
 

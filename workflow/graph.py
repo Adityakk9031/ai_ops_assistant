@@ -1,9 +1,14 @@
-"""LangGraph StateGraph orchestration for AI Operations Assistant."""
+"""LangGraph StateGraph orchestration for AI Operations Assistant using Model Context Protocol (MCP)."""
 
+import sys
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, START, END
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from langchain_mcp_adapters.tools import load_mcp_tools
 
 from workflow.state import AgentState
 from memory.vector_store import VectorMemoryManager
@@ -20,6 +25,29 @@ planner = Planner()
 executor = Executor()
 verifier = Verifier()
 
+# Initialize MCP StdioServerParameters pointing to mcp_server.py
+mcp_server_params = StdioServerParameters(
+    command=sys.executable,
+    args=["mcp_server.py"]
+)
+
+
+async def get_mcp_tools_from_session() -> List[Any]:
+    """
+    Establish an MCP ClientSession using StdioServerParameters and use load_mcp_tools()
+    to retrieve tools dynamically from mcp_server.py over stdio transport.
+    """
+    try:
+        async with stdio_client(mcp_server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                mcp_tools = await load_mcp_tools(session)
+                logger.info(f"[MCP Session] Successfully loaded {len(mcp_tools)} tools via load_mcp_tools()")
+                return mcp_tools
+    except Exception as e:
+        logger.error(f"[MCP Session] Failed to load tools from mcp_server.py: {str(e)}")
+        return []
+
 
 def memory_node(state: AgentState) -> Dict[str, Any]:
     """Memory Node: Query Pinecone vector database for similar past tasks."""
@@ -31,23 +59,29 @@ def memory_node(state: AgentState) -> Dict[str, Any]:
     return {"past_memory": memories}
 
 
-def planner_node(state: AgentState) -> Dict[str, Any]:
-    """Planner Node: Generate structured plan incorporating vector memories."""
+async def planner_node(state: AgentState) -> Dict[str, Any]:
+    """Planner Node: Generate structured plan incorporating vector memories and MCP tools."""
     user_task = state["user_task"]
     past_memory = state.get("past_memory", [])
     logger.info(f"[LangGraph: Planner Node] Creating plan for task: '{user_task}'")
     
-    plan = planner.create_plan(user_task, past_memory=past_memory)
+    # Dynamically load tools via MCP ClientSession
+    mcp_tools = await get_mcp_tools_from_session()
+    
+    plan = planner.create_plan(user_task, past_memory=past_memory, mcp_tools=mcp_tools)
     logger.info(f"[LangGraph: Planner Node] Plan created with {len(plan.get('steps', []))} steps")
     return {"plan": plan}
 
 
-def executor_node(state: AgentState) -> Dict[str, Any]:
-    """Executor Node: Run plan steps using tool adapters."""
+async def executor_node(state: AgentState) -> Dict[str, Any]:
+    """Executor Node: Run plan steps using dynamic MCP tool adapters."""
     plan = state["plan"]
     logger.info(f"[LangGraph: Executor Node] Running plan steps for '{plan.get('task_summary', '')}'")
     
-    tool_results = executor.execute_plan(plan)
+    # Dynamically load tools via MCP ClientSession
+    mcp_tools = await get_mcp_tools_from_session()
+    
+    tool_results = executor.execute_plan(plan, mcp_tools=mcp_tools)
     logger.info(f"[LangGraph: Executor Node] Executed {len(tool_results)} step(s)")
     return {"tool_results": tool_results}
 
@@ -128,5 +162,5 @@ def build_workflow_graph():
     builder.add_edge("save_memory", END)
     
     graph = builder.compile()
-    logger.info("Successfully compiled LangGraph StateGraph workflow")
+    logger.info("Successfully compiled LangGraph StateGraph workflow with MCP tool support")
     return graph

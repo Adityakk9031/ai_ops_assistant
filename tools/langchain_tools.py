@@ -1,108 +1,33 @@
-"""LangChain tool wrappers for GitHubTool, WeatherTool, and NewsTool."""
+"""MCP Tool utilities for loading tools dynamically via Model Context Protocol."""
 
-from typing import List, Dict, Any, Optional
-from langchain_core.tools import tool
-from tools.github_tool import GitHubTool
-from tools.weather_tool import WeatherTool
-from tools.news_tool import NewsTool
+import sys
+import logging
+from typing import List, Any
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from langchain_mcp_adapters.tools import load_mcp_tools
 
-# Instantiate base tools
-github_tool_instance = GitHubTool()
-weather_tool_instance = WeatherTool()
-news_tool_instance = NewsTool()
+logger = logging.getLogger("tools.mcp_tools")
 
-
-@tool
-def github_search_repos(query: str, per_page: int = 10, sort: str = "stars", order: str = "desc") -> Dict[str, Any]:
-    """Search GitHub repositories matching a query string."""
-    response = github_tool_instance.call({
-        "operation": "search_repos",
-        "query": query,
-        "per_page": per_page,
-        "sort": sort,
-        "order": order
-    })
-    return response.to_dict()
+# StdioServerParameters pointing to mcp_server.py
+server_params = StdioServerParameters(
+    command=sys.executable,
+    args=["mcp_server.py"]
+)
 
 
-@tool
-def github_get_repo(owner: str, repo: str) -> Dict[str, Any]:
-    """Get detailed information for a specific GitHub repository."""
-    response = github_tool_instance.call({
-        "operation": "get_repo",
-        "owner": owner,
-        "repo": repo
-    })
-    return response.to_dict()
-
-
-@tool
-def github_get_repos_batch(repo_list: List[str]) -> Dict[str, Any]:
-    """Get details for multiple GitHub repositories at once."""
-    response = github_tool_instance.call({
-        "operation": "get_repos_batch",
-        "repo_list": repo_list
-    })
-    return response.to_dict()
-
-
-@tool
-def weather_current(city: str, units: str = "metric") -> Dict[str, Any]:
-    """Get current weather conditions for a specified city."""
-    response = weather_tool_instance.call({
-        "operation": "current_weather",
-        "city": city,
-        "units": units
-    })
-    return response.to_dict()
-
-
-@tool
-def weather_forecast(city: str, units: str = "metric", cnt: int = 5) -> Dict[str, Any]:
-    """Get weather forecast for a specified city."""
-    response = weather_tool_instance.call({
-        "operation": "forecast",
-        "city": city,
-        "units": units,
-        "cnt": cnt
-    })
-    return response.to_dict()
-
-
-@tool
-def news_search(query: str, language: str = "en", page_size: int = 10) -> Dict[str, Any]:
-    """Search news articles matching a keyword query."""
-    response = news_tool_instance.call({
-        "operation": "search_news",
-        "query": query,
-        "language": language,
-        "page_size": page_size
-    })
-    return response.to_dict()
-
-
-@tool
-def news_top_headlines(category: Optional[str] = None, country: str = "us", page_size: int = 10) -> Dict[str, Any]:
-    """Get top headlines by category or country."""
-    args = {
-        "operation": "top_headlines",
-        "country": country,
-        "page_size": page_size
-    }
-    if category:
-        args["category"] = category
-    response = news_tool_instance.call(args)
-    return response.to_dict()
-
-
-def get_all_langchain_tools():
-    """Return all wrapped LangChain tools."""
-    return [
-        github_search_repos,
-        github_get_repo,
-        github_get_repos_batch,
-        weather_current,
-        weather_forecast,
-        news_search,
-        news_top_headlines
-    ]
+async def get_mcp_tools() -> List[Any]:
+    """
+    Connect to mcp_server.py over stdio transport using MCP ClientSession 
+    and load tools dynamically using langchain-mcp-adapters.
+    """
+    try:
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools = await load_mcp_tools(session)
+                logger.info(f"Successfully loaded {len(tools)} tools dynamically from MCP server")
+                return tools
+    except Exception as e:
+        logger.error(f"Failed to load MCP tools from server: {str(e)}")
+        return []

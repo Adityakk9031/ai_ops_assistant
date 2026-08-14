@@ -44,13 +44,14 @@ class Planner:
         self.client = GeminiClient()
         self.logger = logging.getLogger("agent.planner")
     
-    def create_plan(self, user_task: str, past_memory: list = None) -> Dict[str, Any]:
+    def create_plan(self, user_task: str, past_memory: list = None, mcp_tools: list = None) -> Dict[str, Any]:
         """
         Create an execution plan for the given task.
         
         Args:
             user_task: The task description from the user
             past_memory: Optional list of past similar task memories retrieved from Pinecone
+            mcp_tools: Optional list of MCP tool instances loaded dynamically via load_mcp_tools
             
         Returns:
             Dictionary containing the execution plan
@@ -64,6 +65,14 @@ class Planner:
         # Use replace() instead of format() because the template contains JSON curly braces
         user_prompt = self.prompt_template["user_template"].replace("{user_task}", user_task)
         
+        # Inject MCP tool context if available
+        if mcp_tools:
+            mcp_tool_info = "\n\nLOADED MCP TOOLS (Loaded via langchain-mcp-adapters from FastMCP server):\n"
+            for t in mcp_tools:
+                mcp_tool_info += f"- {getattr(t, 'name', str(t))}: {getattr(t, 'description', '')}\n"
+            user_prompt += mcp_tool_info
+            self.logger.info(f"Injected {len(mcp_tools)} MCP tool descriptions into Planner prompt")
+
         # Inject past memory context if available
         if past_memory:
             memory_text = "\n\nPAST RELEVANT MEMORY (Retrieved from Pinecone vector store):\n"
