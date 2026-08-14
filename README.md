@@ -15,8 +15,8 @@
 ## 📸 Screenshots
 
 ### API Response – Weather Task
-> *Add screenshot of curl response or Swagger UI result here*
-> 📷 `screenshots/weather_response.png`
+<img width="613" height="617" alt="Screenshot 2026-08-14 164927" src="https://github.com/user-attachments/assets/450421b6-b58f-4005-9513-476d3d539d09" />
+
 
 <!-- SCREENSHOT PLACEHOLDER -->
 <!-- ![Weather Task Response](screenshots/weather_response.png) -->
@@ -24,8 +24,8 @@
 ---
 
 ### LangGraph & MCP Server Logs
-> *Add screenshot of terminal showing the full LangGraph node flow and MCP tool session*
-> 📷 `screenshots/server_logs.png`
+<img width="605" height="762" alt="Screenshot 2026-08-14 165053" src="https://github.com/user-attachments/assets/97592308-635f-401b-b623-af2db76a44ad" />
+
 
 <!-- SCREENSHOT PLACEHOLDER -->
 <!-- ![Server Logs](screenshots/server_logs.png) -->
@@ -33,8 +33,8 @@
 ---
 
 ### Pinecone Dashboard – Vector Records Saved
-> *Add screenshot of Pinecone dashboard showing upserted memory records*
-> 📷 `screenshots/pinecone_dashboard.png`
+<img width="1801" height="790" alt="image" src="https://github.com/user-attachments/assets/efef3c88-9054-41a8-a2e0-47af23d1e639" />
+
 
 <!-- SCREENSHOT PLACEHOLDER -->
 <!-- ![Pinecone Dashboard](screenshots/pinecone_dashboard.png) -->
@@ -42,8 +42,8 @@
 ---
 
 ### Swagger UI – Interactive API Docs
-> *Add screenshot of http://localhost:8000/docs*
-> 📷 `screenshots/swagger_ui.png`
+<img width="1760" height="1500" alt="image" src="https://github.com/user-attachments/assets/be64b420-7be1-4860-9e63-3a7a8fc293df" />
+
 
 <!-- SCREENSHOT PLACEHOLDER -->
 <!-- ![Swagger UI](screenshots/swagger_ui.png) -->
